@@ -19,6 +19,7 @@ sentence-transformers = "^4.1.0"
 pyarrow = "^19.0.1"
 pandas = "^2.2.3"
 hdbscan = "^0.8.40"
+kaleido = "0.2.0"
 
 
 [build-system]

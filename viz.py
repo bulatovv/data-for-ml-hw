@@ -17,14 +17,16 @@ bar_df = (
     .to_pandas()
 )
 
-px.bar(
+fig = px.bar(
     bar_df,
     x="item_type",
     y="count",
     title="Item count by item_type",
     text_auto=True,
     template="plotly_white"
-).update_layout(xaxis_title="", yaxis_title="Items").show()
+).update_layout(xaxis_title="", yaxis_title="Items")
+fig.show()
+fig.write_image('plots/item_types_bar.png')
 
 
 for semi_supervised in [True, False]:
@@ -69,4 +71,8 @@ for semi_supervised in [True, False]:
     )
 
     fig.show()
+    if semi_supervised:
+        fig.write_image('plots/embeds_scatter_semisupervised.png')
+    else:
+        fig.write_image('plots/embeds_scatter.png')
 
