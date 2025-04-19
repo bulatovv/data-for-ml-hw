@@ -31,7 +31,7 @@ items = (
 items_annotated = pl.scan_csv('storage/train.csv').select(
     basket_id='check_id',
     item='name',
-    item_category='category',
+    item_type='category',
     item_price='price',
     item_quantity='count'
 )
