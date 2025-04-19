@@ -36,5 +36,4 @@ items_annotated = pl.scan_csv('storage/train.csv').select(
     item_quantity='count'
 )
 
-items.sink_parquet('storage/items.parquet')
-items_annotated.sink_parquet('storage/items_annotated.parquet')
+pl.concat([items, items_annotated], how='diagonal_relaxed').sink_parquet('storage/items.parquet')
