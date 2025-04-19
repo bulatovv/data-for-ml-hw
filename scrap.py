@@ -40,6 +40,13 @@ async def auth(page: Page):
     await phone_input.click()
     await phone_input.type_keys(os.environ['PHONE_NUM'])
 
+    agreement_checkbox = human_element(await page.find_element(
+        By.XPATH,
+        "//span[contains(text(), 'Я согласен')]"
+    ))
+    await agreement_checkbox.human_move()
+    await agreement_checkbox.click()
+    
     captcha = await page.wait_element(
         By.CSS_SELECTOR, 
         '#captcha-container',
@@ -51,14 +58,6 @@ async def auth(page: Page):
     await captcha.human_move()
     await asyncio.sleep(0.1)
     await captcha.click()
-    
-    agreement_checkbox = human_element(await page.find_element(
-        By.XPATH,
-        "//span[contains(text(), 'Я согласен')]"
-    ))
-    await agreement_checkbox.human_move()
-    await agreement_checkbox.click()
-
     
     submit_button = human_element(await page.find_element(
         By.XPATH,
@@ -141,7 +140,7 @@ async def pull_fiscal_data(page, receipts_task):
             await asyncio.sleep(3)
 
 
-        if receipts_task.done():
+        if len(to_fetch) == 0 and receipts_task.done():
             return
 
 
