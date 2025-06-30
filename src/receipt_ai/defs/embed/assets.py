@@ -3,6 +3,7 @@ import polars as pl
 
 from .resources import EmbedderResource
 
+
 @dg.asset(
     deps=["all_sources_concatenated"],
     io_manager_key="polars_parquet_io_manager"

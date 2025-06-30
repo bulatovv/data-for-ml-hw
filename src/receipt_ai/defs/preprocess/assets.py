@@ -51,12 +51,12 @@ def preprocessed_scraped_data(context: dg.AssetExecutionContext) -> pl.LazyFrame
         .explode('items')
         .select(
             timestamp=pl.col('createdDate').str.to_datetime(),
-            brand_name=pl.col('name'),  # Brand name from joined brands
-            brand_type=pl.col('description'),  # Brand description
+            brand_name='name',  # Brand name from joined brands
+            brand_type='description',  # Brand description
             item=pl.col('items').struct.field('name'),
             item_price=pl.col('items').struct.field('price'),
             item_quantity=pl.col('items').struct.field('quantity').cast(pl.Float64),
-            category=pl.lit(None).cast(pl.Utf8),  # No category info in scraped data
+            item_type=pl.lit(None).cast(pl.Utf8),  # No category info in scraped data
             total=pl.lit(None).cast(pl.Float64)  # No total info available at item level
         )
     )
@@ -100,13 +100,13 @@ def preprocessed_additional_data(
     # Map to unified schema
     unified_additional = combined_additional.select(
         timestamp=pl.col('datetime').str.to_datetime(),
-        brand_name=pl.col('shop_name'),
-        brand_type=pl.lit("Additional Source"),
-        item=pl.col('name'),
-        item_price=pl.col('price'),
+        brand_name='shop_name',
+        brand_type=pl.lit(None),
+        item='name',
+        item_price='price',
         item_quantity=pl.col('count').cast(pl.Float64),
-        category=pl.col('category'),
-        total=pl.col('sum')
+        item_type='category',
+        total='sum'
     )
     
     return unified_additional

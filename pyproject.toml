@@ -5,11 +5,15 @@ version = "0.1.0"
 dependencies = [
     "dagster==1.11.0",
     "dagster-polars>=0.27.2",
+    "hdbscan>=0.8.40",
     "httpx>=0.28.1",
+    "llvmlite==0.44.0",
+    "numpy>=2.2.6",
     "patito>=0.8.3",
     "pydoll-python>=2.3.0",
     "sentence-transformers>=4.1.0",
     "torch==2.7.1",
+    "umap-learn==0.5.8",
 ]
 
 [dependency-groups]
