@@ -5,7 +5,6 @@ from pathlib import Path
 
 import dagster as dg
 import polars as pl
-from dagster_polars import PolarsParquetIOManager
 from pydoll.browser.tab import Tab
 
 from .resources import ApiResource
@@ -121,68 +120,10 @@ async def fiscal_data(
     )
 
 
-@dg.asset(
-    deps=["raw_receipts", "fiscal_data"],
-    io_manager_key="polars_parquet_io_manager"
-)
-def processed_receipts(context: dg.AssetExecutionContext) -> pl.LazyFrame:
-    """Process and combine receipt data with fiscal information.
-    
-    Returns
-    -------
-    pl.LazyFrame
-        Combined and processed receipt data as LazyFrame
-    """
-    storage_dir = Path("storage")
-    receipts_file = storage_dir / "receipt.jsonl.gz"
-    fiscal_file = storage_dir / "fiscal_data.jsonl.gz"
-    
-    # Load and process receipts
-    receipts_df = (
-        pl.scan_ndjson(receipts_file, infer_schema_length=10000)
-        .explode('receipts')
-        .unnest('receipts')
-    )
-    
-    fiscal_df = pl.scan_ndjson(fiscal_file, infer_schema_length=10000)
-    combined_df = receipts_df.join(fiscal_df, on='key', how='left')
-    
-    return combined_df
-
-
-@dg.asset(io_manager_key="polars_parquet_io_manager")
-def receipt_items(processed_receipts: pl.LazyFrame) -> pl.LazyFrame:
-    """Extract individual items from receipts.
-    
-    Parameters
-    ----------
-    processed_receipts : pl.LazyFrame
-        Input LazyFrame from processed_receipts asset
-        
-    Returns
-    -------
-    pl.LazyFrame
-        Individual receipt items, or None if no items found
-    """
-    items_df = (
-        processed_receipts
-        .filter(pl.col("items").is_not_null())
-        .explode("items")
-        .unnest("items")
-    )
-    
-    return items_df
-
-
 # Updated Dagster definitions
 defs = dg.Definitions(
     assets=[
         raw_receipts, 
         fiscal_data, 
-        processed_receipts, 
-        receipt_items,
     ],
-    resources={
-        "polars_parquet_io_manager": PolarsParquetIOManager(base_dir="storage"),
-    }
 )
