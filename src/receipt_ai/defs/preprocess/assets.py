@@ -45,7 +45,23 @@ def preprocessed_scraped_data(context: dg.AssetExecutionContext) -> pl.LazyFrame
     # Join with fiscal data
     receipts = receipts.join(fiscal_data, on='key')
     
-    return receipts
+    # Process items following the reference pattern
+    unified_scraped = (
+        receipts
+        .explode('items')
+        .select(
+            timestamp=pl.col('createdDate').str.to_datetime(),
+            brand_name=pl.col('name'),  # Brand name from joined brands
+            brand_type=pl.col('description'),  # Brand description
+            item=pl.col('items').struct.field('name'),
+            item_price=pl.col('items').struct.field('price'),
+            item_quantity=pl.col('items').struct.field('quantity').cast(pl.Float64),
+            category=pl.lit(None).cast(pl.Utf8),  # No category info in scraped data
+            total=pl.lit(None).cast(pl.Float64)  # No total info available at item level
+        )
+    )
+    
+    return unified_scraped
 
 
 @dg.asset(
@@ -57,30 +73,43 @@ def preprocessed_additional_data(
     additional_receipts: pl.LazyFrame,
     additional_fiscal_data: pl.LazyFrame
 ) -> pl.LazyFrame:
-    """Process and combine additional receipt data with fiscal information.
+    """Process and combine additional receipt data with fiscal information, mapping to unified schema.
     
     Parameters
     ----------
     additional_receipts : pl.LazyFrame
-        Additional receipt data from CSV
+        Additional receipt data from train_checks.csv.gz
     additional_fiscal_data : pl.LazyFrame
-        Additional fiscal data from CSV
+        Additional fiscal data from train.csv.gz
         
     Returns
     -------
     pl.LazyFrame
-        Combined additional receipt data with fiscal information joined
+        Combined additional receipt data mapped to unified schema
     """
     context.log.info("Processing additional receipt and fiscal data")
     
-    # Join additional receipts with fiscal data
+    # Join additional receipts with fiscal data on check_id
     combined_additional = additional_receipts.join(
         additional_fiscal_data, 
-        on='key', 
+        left_on='check_id',
+        right_on='check_id',
         how='left'
     )
     
-    return combined_additional
+    # Map to unified schema
+    unified_additional = combined_additional.select(
+        timestamp=pl.col('datetime').str.to_datetime(),
+        brand_name=pl.col('shop_name'),
+        brand_type=pl.lit("Additional Source"),
+        item=pl.col('name'),
+        item_price=pl.col('price'),
+        item_quantity=pl.col('count').cast(pl.Float64),
+        category=pl.col('category'),
+        total=pl.col('sum')
+    )
+    
+    return unified_additional
 
 
 @dg.asset(
@@ -97,9 +126,9 @@ def all_sources_concatenated(
     Parameters
     ----------
     preprocessed_scraped_data : pl.LazyFrame
-        Processed scraped receipt data
+        Processed and mapped scraped receipt data
     preprocessed_additional_data : pl.LazyFrame
-        Processed additional receipt data
+        Processed and mapped additional receipt data
         
     Returns
     -------
@@ -108,44 +137,12 @@ def all_sources_concatenated(
     """
     context.log.info("Concatenating all data sources")
     
-    # Ensure both datasets have compatible schemas by selecting common columns
-    # and adding missing columns with null values where needed
-    
-    # Get column names from both datasets
-    scraped_columns = preprocessed_scraped_data.columns
-    additional_columns = preprocessed_additional_data.columns
-    
-    # Find all unique columns
-    all_columns = set(scraped_columns + additional_columns)
-    
-    # Standardize scraped data columns
-    scraped_standardized = preprocessed_scraped_data.select([
-        col if col in scraped_columns else pl.lit(None).alias(col) 
-        for col in sorted(all_columns)
-    ])
-    
-    # Standardize additional data columns  
-    additional_standardized = preprocessed_additional_data.select([
-        col if col in additional_columns else pl.lit(None).alias(col)
-        for col in sorted(all_columns)
-    ])
-    
-    # Concatenate the standardized datasets
+    # Concatenate both datasets (both are already in unified schema)
     unified_data = pl.concat([
-        scraped_standardized,
-        additional_standardized
-    ], how="vertical_relaxed")
+        preprocessed_scraped_data,
+        preprocessed_additional_data
+    ], how="diagonal_relaxed").with_row_index('basket_id')
     
     context.log.info("Successfully concatenated all data sources")
     
     return unified_data
-
-
-# Updated Dagster definitions including all assets
-defs = dg.Definitions(
-    assets=[
-        preprocessed_scraped_data,
-        preprocessed_additional_data,
-        all_sources_concatenated,
-    ],
-)

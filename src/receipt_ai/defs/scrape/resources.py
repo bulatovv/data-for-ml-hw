@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 import dagster as dg
 import httpx
