@@ -1,3 +1,4 @@
 storage
 chrome-profile
 .env
+__pycache__/

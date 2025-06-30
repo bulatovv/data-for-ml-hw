@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
+from pathlib import Path
 
 import dagster as dg
 import httpx
@@ -103,6 +104,10 @@ class TabResource(dg.ConfigurableResource[Tab]):
         """
         context.log.info("Setting up Chrome browser instance") # pyright: ignore
        
+        profile_path = Path(self.user_data_dir)
+        if not profile_path.exists():
+            profile_path.mkdir()
+
         options = ChromiumOptions()
         options.add_argument(f'--user-data-dir={self.user_data_dir}')
 
@@ -237,7 +242,8 @@ class ApiResource(dg.ConfigurableResource): # pyright: ignore
             f'{self.base_url}/api/v1/receipt',
             headers=headers,
             cookies=cookies,
-            json=payload
+            json=payload,
+            timeout=10.0
         )
         response.raise_for_status()
         return response.json()
@@ -288,7 +294,8 @@ class ApiResource(dg.ConfigurableResource): # pyright: ignore
         response = httpx.get(
             f'{self.base_url}/api/v1/receipt/{receipt_id}',
             headers=headers,
-            cookies=cookies
+            cookies=cookies,
+            timeout=10.0
         )
         response.raise_for_status()
         return response.json()

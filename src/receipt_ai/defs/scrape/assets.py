@@ -11,15 +11,12 @@ from pydoll.browser.tab import Tab
 from .resources import ApiResource
 
 
-@dg.asset(
-    deps=[],
-    io_manager_key="jsonl_file_manager"
-)
+@dg.asset
 async def raw_receipts(
     context: dg.AssetExecutionContext,
     tab: dg.ResourceParam[Tab],
     api: ApiResource
-) -> dg.MaterializeResult:
+): 
     """Scrape raw receipt data from the API.
     
     Returns
@@ -65,15 +62,12 @@ async def raw_receipts(
     )
 
 
-@dg.asset(
-    deps=["raw_receipts"],
-    io_manager_key="jsonl_file_manager"
-)
+@dg.asset(deps=["raw_receipts"],)
 async def fiscal_data(
     context: dg.AssetExecutionContext,
     tab: dg.ResourceParam[Tab],
     api: dg.ResourceParam[ApiResource]
-) -> dg.MaterializeResult:
+):
     """Fetch detailed fiscal data for each receipt.
     
     Returns
@@ -176,9 +170,6 @@ def processed_receipts(context: dg.AssetExecutionContext) -> pl.LazyFrame:
     else:
         combined_df = receipts_df
     
-    total_records = combined_df.select(pl.len()).collect().item()
-    context.log.info(f"Processing {total_records} receipt records")
-    
     return combined_df
 
 
@@ -247,7 +238,6 @@ defs = dg.Definitions(
         receipt_items,
     ],
     resources={
-        "jsonl_file_manager": dg.FilesystemIOManager(base_dir="storage"),
-        "polars_parquet_io_manager": PolarsParquetIOManager(base_dir="storage/parquet"),
+        "polars_parquet_io_manager": PolarsParquetIOManager(base_dir="storage"),
     }
 )
