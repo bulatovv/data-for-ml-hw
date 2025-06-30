@@ -28,10 +28,6 @@ async def raw_receipts(
     storage_dir.mkdir(exist_ok=True)
     receipts_file = storage_dir / "receipt.jsonl.gz"
     
-    # Remove existing file to start fresh
-    if receipts_file.exists():
-        receipts_file.unlink()
-    
     total_receipts = 0
     page_num = 0
     has_more = True
@@ -82,18 +78,6 @@ async def fiscal_data(
     if not receipts_file.exists():
         raise dg.DagsterInvariantViolationError("Receipts file not found")
     
-    # Load existing fiscal data to avoid duplicates
-    if fiscal_file.exists():
-        existing_keys = set(
-            pl.scan_ndjson(fiscal_file)
-            .select('key')
-            .collect()['key']
-            .to_list()
-        )
-    else:
-        existing_keys = set()
-    
-    # Get all receipt keys that need fiscal data
     receipt_keys = (
         pl.scan_ndjson(receipts_file)
         .explode('receipts')
@@ -103,17 +87,16 @@ async def fiscal_data(
         .to_list()
     )
     
-    keys_to_fetch = [key for key in receipt_keys if key not in existing_keys]
-    context.log.info(f"Need to fetch fiscal data for {len(keys_to_fetch)} receipts")
+    context.log.info(f"Need to fetch fiscal data for {len(receipt_keys)} receipts")
     
-    if not keys_to_fetch:
+    if not receipt_keys:
         return dg.MaterializeResult(
             metadata={"fiscal_records_fetched": 0, "message": "No new keys to fetch"}
         )
     
     fetched_count = 0
-    for i, key in enumerate(keys_to_fetch):
-        context.log.info(f"Fetching fiscal data {i+1}/{len(keys_to_fetch)} for key: {key}")
+    for i, key in enumerate(receipt_keys):
+        context.log.info(f"Fetching fiscal data {i+1}/{len(receipt_keys)} for key: {key}")
         
         try:
             data = await api.fetch_fiscal_data(tab, key)
@@ -132,7 +115,7 @@ async def fiscal_data(
     return dg.MaterializeResult(
         metadata={
             "fiscal_records_fetched": fetched_count,
-            "total_keys_processed": len(keys_to_fetch),
+            "total_keys_processed": len(receipt_keys),
             "file_path": str(fiscal_file)
         }
     )
@@ -161,46 +144,14 @@ def processed_receipts(context: dg.AssetExecutionContext) -> pl.LazyFrame:
         .unnest('receipts')
     )
     
-    # Load fiscal data if available
-    if fiscal_file.exists():
-        fiscal_df = pl.scan_ndjson(fiscal_file)
-        
-        # Join receipts with fiscal data
-        combined_df = receipts_df.join(fiscal_df, on='key', how='left')
-    else:
-        combined_df = receipts_df
+    fiscal_df = pl.scan_ndjson(fiscal_file, infer_schema_length=10000)
+    combined_df = receipts_df.join(fiscal_df, on='key', how='left')
     
     return combined_df
 
 
 @dg.asset(io_manager_key="polars_parquet_io_manager")
-def receipt_summary(processed_receipts: pl.LazyFrame) -> pl.LazyFrame:
-    """Create a summary of receipt data.
-    
-    Parameters
-    ----------
-    processed_receipts : pl.LazyFrame
-        Input LazyFrame from processed_receipts asset
-        
-    Returns
-    -------
-    pl.LazyFrame
-        Summary statistics of receipts
-    """
-    return (
-        processed_receipts
-        .group_by("date")
-        .agg([
-            pl.count().alias("receipt_count"),
-            pl.col("amount").sum().alias("total_amount"),
-            pl.col("amount").mean().alias("avg_amount")
-        ])
-        .sort("date")
-    )
-
-
-@dg.asset(io_manager_key="polars_parquet_io_manager")
-def receipt_items(processed_receipts: pl.LazyFrame) -> pl.LazyFrame | None:
+def receipt_items(processed_receipts: pl.LazyFrame) -> pl.LazyFrame:
     """Extract individual items from receipts.
     
     Parameters
@@ -210,7 +161,7 @@ def receipt_items(processed_receipts: pl.LazyFrame) -> pl.LazyFrame | None:
         
     Returns
     -------
-    pl.LazyFrame | None
+    pl.LazyFrame
         Individual receipt items, or None if no items found
     """
     items_df = (
@@ -220,11 +171,6 @@ def receipt_items(processed_receipts: pl.LazyFrame) -> pl.LazyFrame | None:
         .unnest("items")
     )
     
-    # Return None if no items found
-    item_count = items_df.select(pl.len()).collect().item()
-    if item_count == 0:
-        return None
-        
     return items_df
 
 
@@ -234,7 +180,6 @@ defs = dg.Definitions(
         raw_receipts, 
         fiscal_data, 
         processed_receipts, 
-        receipt_summary, 
         receipt_items,
     ],
     resources={
